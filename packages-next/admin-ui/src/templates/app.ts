@@ -14,14 +14,11 @@ import {
 import { staticAdminMetaQuery } from '../admin-meta-graphql';
 import Path from 'path';
 
-type AppTemplateOptions = {
-  configFile: boolean;
-  projectAdminPath: string;
-};
+type AppTemplateOptions = { configFileExists: boolean; projectAdminPath: string };
 
 export const appTemplate = (
   system: KeystoneSystem,
-  { configFile, projectAdminPath }: AppTemplateOptions
+  { configFileExists, projectAdminPath }: AppTemplateOptions
 ) => {
   const { graphQLSchema, adminMeta, views } = system;
   const lazyMetadataQuery = getLazyMetadataQuery(graphQLSchema, adminMeta);
@@ -29,14 +26,15 @@ export const appTemplate = (
   const result = executeSync({
     document: staticAdminMetaQuery,
     schema: graphQLSchema,
-    contextValue: {
-      isAdminUIBuildProcess: true,
-    },
+    contextValue: { isAdminUIBuildProcess: true },
   });
   if (result.errors) {
     throw result.errors[0];
   }
   const adminMetaQueryResultHash = hashString(JSON.stringify(result.data!.keystone.adminMeta));
+  const viewPaths = views.map(view =>
+    Path.isAbsolute(view) ? Path.relative(Path.join(projectAdminPath, 'pages'), view) : view
+  );
   // -- TEMPLATE START
   return `
 import React from 'react';
@@ -45,16 +43,13 @@ import { KeystoneProvider } from '@keystone-next/admin-ui/context';
 import { ErrorBoundary } from '@keystone-next/admin-ui/components';
 import { Core } from '@keystone-ui/core';
 
-${views
-  .map(
-    (view, i) =>
-      `import * as view${i} from ${JSON.stringify(
-        Path.isAbsolute(view) ? Path.relative(Path.join(projectAdminPath, 'pages'), view) : view
-      )}`
-  )
-  .join('\n')}
+${viewPaths.map((path, i) => `import * as view${i} from "${path}"`).join('\n')}
 
-${configFile ? `import * as adminConfig from "../../../admin/config";` : 'const adminConfig = {};'}
+${
+  configFileExists
+    ? `import * as adminConfig from "../../../admin/config";`
+    : 'const adminConfig = {};'
+}
 
 const fieldViews = [${views.map((x, i) => `view${i}`)}];
 
@@ -201,10 +196,7 @@ function getLazyMetadataQuery(
       {
         kind: 'OperationDefinition',
         operation: 'query',
-        selectionSet: {
-          kind: 'SelectionSet',
-          selections: lazyMetadataSelections,
-        },
+        selectionSet: { kind: 'SelectionSet', selections: lazyMetadataSelections },
       },
     ],
   };
