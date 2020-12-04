@@ -65,7 +65,10 @@ export function createGraphQLSchema(
     });
   }
 
-  graphQLSchema = adminMetaSchemaExtension({ adminMeta, graphQLSchema, config });
+  graphQLSchema = mergeSchemas({
+    schemas: [graphQLSchema],
+    ...adminMetaSchemaExtension({ adminMeta, config }),
+  });
 
   return graphQLSchema;
 }
